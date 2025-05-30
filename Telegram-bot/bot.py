@@ -11,6 +11,10 @@ from telegram.ext import (
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+from google.oauth2 import service_account
+
 # Load token
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -30,6 +34,10 @@ client = gspread.authorize(creds)
 
 # Open the sheet (change name if needed)
 sheet = client.open("Rooster_bot_responses").sheet1
+
+# Load Drive credentials from same dict as Sheets
+drive_creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=scope)
+drive_service = build("drive", "v3", credentials=drive_creds)
 
 # States for conversation
 VOICE, PERMISSION, LANGUAGE, NAME = range(4)
@@ -86,11 +94,37 @@ def handle_name(update: Update, context: CallbackContext):
     voice_id = context.user_data["voice"]
     telegram_id = update.message.from_user.id
 
-    # Append to Google Sheet
-    sheet.append_row([name, language, permission, voice_id, telegram_id])
+    # Download voice file from Telegram
+    file = context.bot.get_file(voice_id)
+    local_filename = f"Kikeriki_{language}_{name}.ogg"
+    file.download(local_filename)
+
+    # Upload to Google Drive
+    media = MediaFileUpload(local_filename, mimetype="audio/ogg")
+    file_metadata = {
+        "name": local_filename,
+        "parents": [],  # Optional: add folder ID here if needed
+    }
+    uploaded_file = drive_service.files().create(
+        body=file_metadata,
+        media_body=media,
+        fields="id"
+    ).execute()
+
+    # Make file public
+    drive_service.permissions().create(
+        fileId=uploaded_file["id"],
+        body={"role": "reader", "type": "anyone"},
+    ).execute()
+
+    # Generate public link
+    public_url = f"https://drive.google.com/uc?id={uploaded_file['id']}&export=download"
+
+    # Append all data to the sheet
+    sheet.append_row([name, language, permission, voice_id, telegram_id, public_url])
 
     update.message.reply_text(
-        "Thank you! 🎉 Your answers have been saved to the project.\n"
+        "Thank you! 🎉 Your answers and voice have been saved to the project.\n"
         "You can type /start to send another voice."
     )
 
