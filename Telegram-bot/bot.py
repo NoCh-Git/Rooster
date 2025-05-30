@@ -6,6 +6,17 @@ from telegram.ext import (
     Updater, CommandHandler, MessageHandler, Filters,
     ConversationHandler, CallbackContext
 )
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+
+# Set up Google Sheets API
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name("sheets_key.json", scope)
+client = gspread.authorize(creds)
+
+# Open the sheet (change name if needed)
+sheet = client.open("Rooster_bot_responses").sheet1
+
 
 # Load token
 load_dotenv()
@@ -63,22 +74,20 @@ def handle_language(update: Update, context: CallbackContext):
 # Handle name
 def handle_name(update: Update, context: CallbackContext):
     context.user_data["name"] = update.message.text.strip()
+    name = context.user_data["name"]
+    language = context.user_data["language"]
+    permission = context.user_data["permission"]
+    voice_id = context.user_data["voice"]
+    telegram_id = update.message.from_user.id
 
-    # Save to CSV
-    with open("responses.csv", mode="a", newline='', encoding="utf-8") as file:
-        writer = csv.writer(file)
-        writer.writerow([
-            context.user_data.get("name"),
-            context.user_data.get("language"),
-            context.user_data.get("permission"),
-            context.user_data.get("voice"),
-            update.message.from_user.id
-        ])
+    # Append to Google Sheet
+    sheet.append_row([name, language, permission, voice_id, telegram_id])
 
     update.message.reply_text(
-        "Thank you! 🎉 Your answers have been recorded.\n"
+        "Thank you! 🎉 Your answers have been saved to the project.\n"
         "You can type /start to send another voice."
     )
+
     return ConversationHandler.END
 
 # Cancel command

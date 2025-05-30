@@ -182,3 +182,5 @@ data/
 # vscode Stuff
 .vscode
 
+# Google Sheets API credentials
+Telegram-bot/sheets_key.json
