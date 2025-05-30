@@ -1,7 +1,9 @@
 import os
+import json
 import csv
+from io import StringIO
 from dotenv import load_dotenv
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram import Update
 from telegram.ext import (
     Updater, CommandHandler, MessageHandler, Filters,
     ConversationHandler, CallbackContext
@@ -9,20 +11,25 @@ from telegram.ext import (
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-# Set up Google Sheets API
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("sheets_key.json", scope)
-client = gspread.authorize(creds)
-
-# Open the sheet (change name if needed)
-sheet = client.open("Rooster_bot_responses").sheet1
-
-
 # Load token
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 if not TOKEN:
     raise ValueError("TELEGRAM_BOT_TOKEN not found.")
+
+# Set up Google Sheets API using JSON from env variable
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+service_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+
+if not service_json:
+    raise ValueError("GOOGLE_SERVICE_ACCOUNT_JSON not found in environment variables.")
+
+creds_dict = json.loads(service_json)
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+client = gspread.authorize(creds)
+
+# Open the sheet (change name if needed)
+sheet = client.open("Rooster_bot_responses").sheet1
 
 # States for conversation
 VOICE, PERMISSION, LANGUAGE, NAME = range(4)
@@ -47,7 +54,7 @@ def handle_voice(update: Update, context: CallbackContext):
     if voice.duration > 15:
         update.message.reply_text("Please send a voice message shorter than 15 seconds.")
         return VOICE
-    
+
     context.user_data["voice"] = voice.file_id  # Store the voice for later
 
     update.message.reply_text(
@@ -56,8 +63,7 @@ def handle_voice(update: Update, context: CallbackContext):
         "It would be named with a name or pseudonym you provide, like: Kikeriki_German_Anna.wav\n\n"
         "Please reply with 'Yes' or 'No'."
     )
-
-    return PERMISSION  
+    return PERMISSION
 
 # Handle permission
 def handle_permission(update: Update, context: CallbackContext):
